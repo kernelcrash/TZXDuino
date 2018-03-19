@@ -36,6 +36,12 @@
  *                set of extracted and DEMO AY files can be downloaded from
  *                http://www.worldofspectrum.org/projectay/index.htm
  *                Happy listening!
+ *                
+ *              V1.8u1 (kernel@kernelcrash.com)  
+ *                Mods to V1.8 TZXDuino to enable UEF playback. Only supports gunzip'd
+ *                UEF files though (that still end in .uef). Plays back UEF's as square
+ *                wave not sine waves.
+ *                
  */
 
 #include <SdFat.h>
@@ -52,7 +58,8 @@
 #ifdef LCDSCREEN16x2
   #include <Wire.h> 
   #include <LiquidCrystal_I2C.h>
-  LiquidCrystal_I2C lcd(0x3f,16,2); // set the LCD address to 0x27 for a 16 chars and 2 line display
+  //LiquidCrystal_I2C lcd(0x3f,16,2); // set the LCD address to 0x27 for a 16 chars and 2 line display
+  LiquidCrystal_I2C lcd(0x27,16,2); // set the LCD address to 0x27 for a 16 chars and 2 line display
   #endif
 
 #ifdef OLED1306 
@@ -76,7 +83,8 @@ SdFat sd;                           //Initialise Sd card
 
 SdFile entry;                       //SD card file
 
-#define filenameLength    100       //Maximum length for scrolling filename
+//#define filenameLength    100       //Maximum length for scrolling filename
+#define filenameLength    90       //Maximum length for scrolling filename
 
 char fileName[filenameLength + 1];    //Current filename
 char sfileName[13];                 //Short filename variable
@@ -106,6 +114,7 @@ byte isDir = 0;                     //Is the current file a directory
 unsigned long timeDiff = 0;         //button debounce
 
 void setup() {
+  Serial.begin(115200);
   
   #ifdef LCDSCREEN16x2
     lcd.init();                     //Initialise LCD (16x2 type)
@@ -155,8 +164,17 @@ void setup() {
   pinMode(btnRoot, INPUT_PULLUP);
   digitalWrite(btnRoot, HIGH); 
    
-  printtext("TZXDuino v1.8",0);
+  printtext("TZXDuino v1.8.u1",0);
+  if(digitalRead(btnRoot)==LOW) {
+     uefTurboMode=!uefTurboMode;
+
+
+  } 
+  if (uefTurboMode) {
+     printtext("Turbo UEF mode",1);
+  }
   delay(2000);
+  
   
   #ifdef LCDSCREEN16x2
     lcd.clear();
@@ -206,7 +224,7 @@ void loop(void) {
             printtext("Paused",0);
             pauseOn = 1;
           } else {
-            printtext("Playing",0);
+            showPlaying();
             pauseOn = 0;
           }
        }
@@ -230,6 +248,7 @@ void loop(void) {
        stopFile();
      }
      if(digitalRead(btnUp)==LOW && start==0) {
+      
        //Move up a file in the directory
        scrollTime=millis()+scrollWait;
        scrollPos=0;
@@ -240,6 +259,7 @@ void loop(void) {
        }
      }
      if(digitalRead(btnDown)==LOW && start==0) {
+       
        //Move down a file in the directory
        scrollTime=millis()+scrollWait;
        scrollPos=0;
@@ -257,12 +277,22 @@ void loop(void) {
          pauseOn = 1;
        } 
        if(motorState==0 && pauseOn==1) {
-         printtext("Playing",0);
+         showPlaying();
          //delay(2250);
          pauseOn = 0;
        }
        oldMotorState=motorState;
      }
+  }
+}
+
+void showPlaying() {
+  printtext("Playing",0);
+  if (currentID == UEF) {
+    if (uefTurboMode) {
+      // overwrite what we just wrote
+       printtext("Playing(Turbo)",0);
+     }    
   }
 }
 
@@ -313,13 +343,15 @@ void playFile() {
     changeDir();
   } else {
     if(entry.cwd()->exists(sfileName)) {
-      printtext("Playing",0);
+      showPlaying();
       scrollPos=0;
       pauseOn = 0;
       scrollText(fileName);
       TZXPlay(sfileName);           //Load using the short filename
       start=1;       
     } else {
+      Serial.println(F("No file selected"));
+      
       printtext("No File Selected",1);
     }
   }

@@ -3,7 +3,8 @@
 Arduino based TZX and TAP (currently only ZX spectrum and Amstrad CPC flavour) file player.<br/>
 (Excuse the badly written code, I'm working on that ;) )
 
-## Parts Used
+(kernelcrash) Added support for UEF files. See README-with-uef-support.md
+
 1. Arduino (I used a Nano, but this should work on any NANO compatible)
 2. SD card module
 3. 16x2 I2C LCD

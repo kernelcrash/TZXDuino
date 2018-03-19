@@ -1,9 +1,12 @@
+#define DEBUG 0
 #define outputPin           9              // Audio Output PIN - Set accordingly to your hardware.
+
 
 const char TZXTape[7] = {'Z','X','T','a','p','e','!'};
 const char TAPcheck[7] = {'T','A','P','t','a','p','.'};
 const char ZX81Filename[9] = {'T','Z','X','D','U','I','N','O',0x9D};
 const char AYFile[8] = {'Z','X','A','Y','E','M','U','L'};           // added additional AY file header check
+const char UEFFile[9] = {'U','E','F',' ','F','i','l','e','!'};
 const char TAPHdr[20] = {0x0,0x0,0x3,'Z','X','A','Y','F','i','l','e',' ',' ',0x1A,0xB,0x0,0xC0,0x0,0x80,0x6E}; // 
 //const char TAPHdr[24] = {0x13,0x0,0x0,0x3,' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',0x1A,0xB,0x0,0xC0,0x0,0x80,0x52,0x1C,0xB,0xFF};
 
@@ -34,11 +37,19 @@ const char TAPHdr[20] = {0x0,0x0,0x3,'Z','X','A','Y','F','i','l','e',' ',' ',0x1
 #define ID35                0x35    //Custom info block
 #define IDPAUSE				0x59	//Custom Pause processing
 #define ID5A                0x5A    //Glue block (90 dec, ASCII Letter 'Z')
+#define UEF                 0xFA    //UEF file
 #define AYO                 0xFB    //AY file
 #define ZXO                 0xFC    //ZX80 O file
 #define ZXP                 0xFD    //ZX81 P File
 #define TAP                 0xFE    //Tap File Mode
 #define EOF                 0xFF    //End of file
+
+// UEF chunks
+#define ID0000              0x0000
+#define ID0100              0x0100
+#define ID0110              0x0110
+#define ID0112              0x0112
+#define IDCHUNKEOF          0xffff
 
 
 //TZX File Tasks
@@ -46,6 +57,10 @@ const char TAPHdr[20] = {0x0,0x0,0x3,'Z','X','A','Y','F','i','l','e',' ',' ',0x1
 #define GETID                 1
 #define PROCESSID             2
 #define GETAYHEADER           3
+#define GETUEFHEADER          4
+#define GETCHUNKID            5
+#define PROCESSCHUNKID        6
+
 
 //TZX ID Tasks
 #define READPARAM             0
@@ -59,11 +74,45 @@ const char TAPHdr[20] = {0x0,0x0,0x3,'Z','X','A','Y','F','i','l','e',' ',' ',0x1
 #define buffsize              64
 
 //Spectrum Standards
+//#define PILOTLENGTH           619
 #define PILOTLENGTH           619
+
 #define SYNCFIRST             191
 #define SYNCSECOND            210
 #define ZEROPULSE             244
 #define ONEPULSE              489
+
+// UEF stuff
+// For 1200 baud zero is 416us, one is 208us
+// For 1500 baud zero is 333us, one is 166us
+// For 1550 baud zero is 322us, one is 161us
+// For 1600 baud zero is 313us, one is 156us
+
+#define TURBOBAUD1550
+
+// 1200 baud UEF
+#define UEFPILOTPULSES        outWord<<2;
+#define UEFPILOTLENGTH        208
+#define UEFZEROPULSE             416
+#define UEFONEPULSE              208
+
+
+#ifdef TURBOBAUD1550
+#define UEFTURBOPILOTPULSES     320
+#define UEFTURBOPILOTLENGTH        161
+#define UEFTURBOZEROPULSE             322
+#define UEFTURBOONEPULSE              161
+#endif
+
+#ifdef TURBOBAUD1600
+#define UEFTURBOPILOTPULSES       320
+#define UEFTURBOPILOTLENGTH        156
+#define UEFTURBOZEROPULSE             313
+#define UEFTURBOONEPULSE              156
+#endif
+
+
+
 #define PILOTNUMBERL          8063
 #define PILOTNUMBERH          3223
 #define PAUSELENGTH           1000   
@@ -80,6 +129,7 @@ const char TAPHdr[20] = {0x0,0x0,0x3,'Z','X','A','Y','F','i','l','e',' ',' ',0x1
 
 //Keep track of which ID, Task, and Block Task we're dealing with
 byte currentID = 0;
+word chunkID = 0;
 byte currentTask = 0;
 byte currentBlockTask = 0;
 
@@ -130,3 +180,6 @@ volatile byte currentChar=0;
 byte pass=0;
 unsigned long debugCount=0;
 byte EndOfFile=false;
+byte lastByte;
+// Set uefTurboMode to 0 if the default is 1200 baud. Set to 1 if the default is turbo speed. Holding doown 'ROOT' button on poweron, toggles this
+byte uefTurboMode=0;
